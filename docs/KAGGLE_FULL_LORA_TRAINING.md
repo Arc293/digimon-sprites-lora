@@ -32,14 +32,14 @@ First notebook cell:
 
 ```bash
 cd /kaggle/working
-git clone <YOUR_REPO_URL> Digimon_vpets
-cd Digimon_vpets
+git clone https://github.com/Arc293/digimon-sprites-lora.git
+cd digimon-sprites-lora
 ```
 
 ## 3) Start full training
 
 ```bash
-cd /kaggle/working/Digimon_vpets
+cd /kaggle/working/digimon-sprites-lora
 export HF_TOKEN="$HF_TOKEN"
 export INSTANCE_DATA_DIR="/kaggle/input/vpet-lora-train-images/train_images"
 export OUTPUT_DIR="/kaggle/working/outputs/lora_vpet_flux2_klein4b_full"
@@ -64,7 +64,7 @@ bash scripts/kaggle_train_flux2_lora_full.sh
 OOM-safe preset (recommended first run on Kaggle `T4 x2`):
 
 ```bash
-cd /kaggle/working/Digimon_vpets
+cd /kaggle/working/digimon-sprites-lora
 export HF_TOKEN="$HF_TOKEN"
 export INSTANCE_DATA_DIR="/kaggle/input/vpet-lora-train-images/train_images"
 export OUTPUT_DIR="/kaggle/working/outputs/lora_vpet_flux2_klein4b_full"

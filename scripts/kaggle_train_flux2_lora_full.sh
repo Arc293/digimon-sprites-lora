@@ -4,7 +4,8 @@ set -euo pipefail
 # Kaggle-oriented full LoRA training launcher (resume-safe).
 # Run this inside a Kaggle notebook terminal/cell with `bash scripts/kaggle_train_flux2_lora_full.sh`.
 
-REPO_DIR="${REPO_DIR:-/kaggle/working/Digimon_vpets}"
+REPO_NAME="${REPO_NAME:-digimon-sprites-lora}"
+REPO_DIR="${REPO_DIR:-/kaggle/working/$REPO_NAME}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-$REPO_DIR/scripts/third_party/train_dreambooth_lora_flux2_klein.py}"
 
 MODEL_NAME="${MODEL_NAME:-black-forest-labs/FLUX.2-klein-base-4B}"

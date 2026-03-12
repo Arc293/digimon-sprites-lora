@@ -1,0 +1,41 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python cache / env
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# Local training/generation artifacts
+outputs/
+dist/
+logs/
+tensorboard/
+wandb/
+
+# Large source image corpora (not needed in Kaggle repo clone)
+training/
+working/
+
+# Local prepared datasets (use Kaggle Dataset input instead)
+datasets/working_prepped/
+datasets/vpet_lora/train/
+datasets/vpet_lora/train_images/
+
+# Optional local secrets/config
+.env
+*.key
+*.pem
+*.token

@@ -1,0 +1,139 @@
+{
+  "4": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux-2-klein-4b.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "30": {
+    "class_type": "LoadFluxIPAdapter",
+    "inputs": {
+      "ipadatper": "ip_adapter.safetensors",
+      "clip_vision": "clip_vision_l.safetensors",
+      "provider": "CPU"
+    }
+  },
+  "31": {
+    "class_type": "ApplyFluxIPAdapter",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "ip_adapter_flux": [
+        "30",
+        0
+      ],
+      "image": [
+        "10",
+        0
+      ],
+      "ip_scale": 0.94
+    }
+  },
+  "12": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    }
+  },
+  "13": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "PLACEHOLDER_INPUT.png",
+      "upload": "image"
+    }
+  },
+  "11": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "10",
+        0
+      ],
+      "vae": [
+        "13",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "same character as input image, preserve face and key features, digimon, virtual pet sprite style, pixel art, 1px outline, limited color palette",
+      "clip": [
+        "12",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "different character, changed species, changed face, changed silhouette, blurry, noisy, photorealistic, painterly, text, watermark",
+      "clip": [
+        "12",
+        0
+      ]
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 1337,
+      "steps": 18,
+      "cfg": 4.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 0.42,
+      "model": [
+        "31",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "11",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "13",
+        0
+      ]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "vpet_batch_flux2_identity",
+      "images": [
+        "8",
+        0
+      ]
+    }
+  }
+}

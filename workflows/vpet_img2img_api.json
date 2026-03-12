@@ -1,0 +1,139 @@
+{
+  "4": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux-2-klein-4b.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "12": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    }
+  },
+  "13": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "PLACEHOLDER_INPUT.png",
+      "upload": "image"
+    }
+  },
+  "11": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "10",
+        0
+      ],
+      "vae": [
+        "13",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "same character as input image, preserve pose and silhouette, preserve body proportions, digimon, full body centered, vpet sprite style, pixel art, crisp 1px outline, limited color palette",
+      "clip": [
+        "12",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "different character, changed pose, changed silhouette, extra limbs, missing limbs, blurry, noisy, jpeg artifacts, text, watermark, logo, signature, photorealistic, 3d render",
+      "clip": [
+        "12",
+        0
+      ]
+    }
+  },
+  "14": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "latent": [
+        "11",
+        0
+      ]
+    }
+  },
+  "15": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "7",
+        0
+      ],
+      "latent": [
+        "11",
+        0
+      ]
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 1337,
+      "steps": 18,
+      "cfg": 4.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 0.35,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "14",
+        0
+      ],
+      "negative": [
+        "15",
+        0
+      ],
+      "latent_image": [
+        "11",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "13",
+        0
+      ]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "vpet_batch_flux2",
+      "images": [
+        "8",
+        0
+      ]
+    }
+  }
+}

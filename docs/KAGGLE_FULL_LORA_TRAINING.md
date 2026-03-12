@@ -71,6 +71,11 @@ export OUTPUT_DIR="/kaggle/working/outputs/lora_vpet_flux2_klein4b_full"
 bash scripts/kaggle_train_flux2_lora_oom_preset.sh
 ```
 
+Why this preset is single-GPU:
+- `accelerate --multi_gpu` is data-parallel, so each GPU still loads the full model.
+- FLUX2-klein + Qwen text encoder can exceed per-GPU VRAM on T4 16GB, even with 2 GPUs available.
+- This preset uses `NUM_PROCESSES=1`, `RESOLUTION=320`, `MAX_SEQUENCE_LENGTH=256`, and `--offload`.
+
 Notes:
 - The launcher auto-detects GPU count and uses `accelerate --multi_gpu` when `NUM_PROCESSES > 1`.
 - Effective batch size is `TRAIN_BATCH_SIZE * GRAD_ACCUM * NUM_PROCESSES`.
@@ -105,7 +110,8 @@ Then use in workflow with:
 ## 6) Stability knobs (if training fails)
 
 - OOM: reduce `RESOLUTION` to `384`, then `320`; increase `GRAD_ACCUM` to keep effective batch.
+- OOM at model load (`text_encoder.to`): set `NUM_PROCESSES=1`, `ENABLE_OFFLOAD=1`, `MAX_SEQUENCE_LENGTH=256`.
 - NaNs: reduce `LEARNING_RATE` to `5e-5` or `2e-5`.
 - Too weak style: increase `MAX_TRAIN_STEPS` to `1600+`.
 - Overfitting/weird outputs: lower `RANK` from `16` to `8`, or stop at an earlier checkpoint.
-- If both GPUs are visible but memory is tight, keep `NUM_PROCESSES=2` and lower `RESOLUTION` before reducing processes.
+- If OOM persists on `NUM_PROCESSES=1`, keep `ENABLE_OFFLOAD=1` and drop `RESOLUTION` to `256`.

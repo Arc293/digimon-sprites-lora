@@ -26,6 +26,9 @@ CHECKPOINT_EVERY="${CHECKPOINT_EVERY:-100}"
 SEED="${SEED:-42}"
 MIXED_PRECISION="${MIXED_PRECISION:-fp16}"
 NUM_PROCESSES="${NUM_PROCESSES:-auto}"
+MAX_SEQUENCE_LENGTH="${MAX_SEQUENCE_LENGTH:-512}"
+USE_CACHE_LATENTS="${USE_CACHE_LATENTS:-1}"
+ENABLE_OFFLOAD="${ENABLE_OFFLOAD:-0}"
 
 install_deps() {
   python3 -m pip install -q --upgrade \
@@ -83,6 +86,7 @@ main() {
     exit 1
   fi
   echo "[kaggle] num_processes=$num_procs (NUM_PROCESSES=$NUM_PROCESSES)"
+  echo "[kaggle] max_sequence_length=$MAX_SEQUENCE_LENGTH use_cache_latents=$USE_CACHE_LATENTS offload=$ENABLE_OFFLOAD"
 
   if [[ ! -f "$TRAIN_SCRIPT" ]]; then
     echo "Training script not found: $TRAIN_SCRIPT" >&2
@@ -116,17 +120,25 @@ main() {
     accelerate_args+=(--multi_gpu)
   fi
 
+  local training_flags=()
+  if [[ "$USE_CACHE_LATENTS" == "1" ]]; then
+    training_flags+=(--cache_latents)
+  fi
+  if [[ "$ENABLE_OFFLOAD" == "1" ]]; then
+    training_flags+=(--offload)
+  fi
+
   accelerate "${accelerate_args[@]}" "$TRAIN_SCRIPT" \
     --pretrained_model_name_or_path "$MODEL_NAME" \
     --instance_data_dir "$INSTANCE_DATA_DIR" \
     --output_dir "$OUTPUT_DIR" \
     --instance_prompt "$INSTANCE_PROMPT" \
     --resolution "$RESOLUTION" \
+    --max_sequence_length "$MAX_SEQUENCE_LENGTH" \
     --center_crop \
     --train_batch_size "$TRAIN_BATCH_SIZE" \
     --gradient_accumulation_steps "$GRAD_ACCUM" \
     --gradient_checkpointing \
-    --cache_latents \
     --optimizer AdamW \
     --learning_rate "$LEARNING_RATE" \
     --lr_scheduler constant \
@@ -138,6 +150,7 @@ main() {
     --seed "$SEED" \
     --report_to tensorboard \
     --skip_final_inference \
+    "${training_flags[@]}" \
     "${resume_arg[@]}"
 
   echo "[kaggle] done"

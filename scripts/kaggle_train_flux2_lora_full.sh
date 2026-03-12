@@ -24,6 +24,7 @@ MAX_TRAIN_STEPS="${MAX_TRAIN_STEPS:-1200}"
 CHECKPOINT_EVERY="${CHECKPOINT_EVERY:-100}"
 SEED="${SEED:-42}"
 MIXED_PRECISION="${MIXED_PRECISION:-fp16}"
+NUM_PROCESSES="${NUM_PROCESSES:-auto}"
 
 install_deps() {
   python3 -m pip install -q --upgrade \
@@ -51,11 +52,36 @@ find_latest_checkpoint() {
   echo "$latest"
 }
 
+detect_num_processes() {
+  if [[ "$NUM_PROCESSES" != "auto" ]]; then
+    echo "$NUM_PROCESSES"
+    return
+  fi
+
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    local count
+    count="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | wc -l | tr -d ' ')"
+    if [[ -n "$count" && "$count" -ge 1 ]]; then
+      echo "$count"
+      return
+    fi
+  fi
+
+  echo "1"
+}
+
 main() {
   echo "[kaggle] repo_dir=$REPO_DIR"
   echo "[kaggle] model=$MODEL_NAME"
   echo "[kaggle] data=$INSTANCE_DATA_DIR"
   echo "[kaggle] output=$OUTPUT_DIR"
+  local num_procs
+  num_procs="$(detect_num_processes)"
+  if ! [[ "$num_procs" =~ ^[0-9]+$ ]] || [[ "$num_procs" -lt 1 ]]; then
+    echo "Invalid NUM_PROCESSES resolved value: $num_procs" >&2
+    exit 1
+  fi
+  echo "[kaggle] num_processes=$num_procs (NUM_PROCESSES=$NUM_PROCESSES)"
 
   if [[ ! -f "$TRAIN_SCRIPT" ]]; then
     echo "Training script not found: $TRAIN_SCRIPT" >&2
@@ -80,7 +106,16 @@ main() {
     echo "[kaggle] no checkpoint found, starting fresh"
   fi
 
-  accelerate launch --num_processes 1 --mixed_precision "$MIXED_PRECISION" "$TRAIN_SCRIPT" \
+  local accelerate_args=(
+    launch
+    --num_processes "$num_procs"
+    --mixed_precision "$MIXED_PRECISION"
+  )
+  if [[ "$num_procs" -gt 1 ]]; then
+    accelerate_args+=(--multi_gpu)
+  fi
+
+  accelerate "${accelerate_args[@]}" "$TRAIN_SCRIPT" \
     --pretrained_model_name_or_path "$MODEL_NAME" \
     --instance_data_dir "$INSTANCE_DATA_DIR" \
     --output_dir "$OUTPUT_DIR" \

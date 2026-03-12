@@ -52,11 +52,29 @@ export LEARNING_RATE=1e-4
 export RANK=16
 export LORA_ALPHA=16
 export TRAIN_BATCH_SIZE=1
-export GRAD_ACCUM=4
+export GRAD_ACCUM=2
 export MIXED_PRECISION=fp16
+# Optional override; default is auto-detect from nvidia-smi.
+# For T4 x2:
+export NUM_PROCESSES=2
 
 bash scripts/kaggle_train_flux2_lora_full.sh
 ```
+
+OOM-safe preset (recommended first run on Kaggle `T4 x2`):
+
+```bash
+cd /kaggle/working/Digimon_vpets
+export HF_TOKEN="$HF_TOKEN"
+export INSTANCE_DATA_DIR="/kaggle/input/vpet-lora-train-images/train_images"
+export OUTPUT_DIR="/kaggle/working/outputs/lora_vpet_flux2_klein4b_full"
+bash scripts/kaggle_train_flux2_lora_oom_preset.sh
+```
+
+Notes:
+- The launcher auto-detects GPU count and uses `accelerate --multi_gpu` when `NUM_PROCESSES > 1`.
+- Effective batch size is `TRAIN_BATCH_SIZE * GRAD_ACCUM * NUM_PROCESSES`.
+- For Kaggle `T4 x2`, `TRAIN_BATCH_SIZE=1` and `GRAD_ACCUM=2` is a good starting point.
 
 ## 4) Resume in later Kaggle sessions
 
@@ -90,3 +108,4 @@ Then use in workflow with:
 - NaNs: reduce `LEARNING_RATE` to `5e-5` or `2e-5`.
 - Too weak style: increase `MAX_TRAIN_STEPS` to `1600+`.
 - Overfitting/weird outputs: lower `RANK` from `16` to `8`, or stop at an earlier checkpoint.
+- If both GPUs are visible but memory is tight, keep `NUM_PROCESSES=2` and lower `RESOLUTION` before reducing processes.

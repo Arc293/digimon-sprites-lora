@@ -70,9 +70,9 @@ def padded_box(box: Tuple[int, int, int, int], image_size: Tuple[int, int], pad:
     )
 
 
-def make_caption(name: str, trigger_token: str) -> str:
+def make_caption(name: str, style_trigger_token: str, pose_trigger_token: str, pose_description: str) -> str:
     return (
-        f"{trigger_token}, digimon, {name}, full body, "
+        f"{style_trigger_token}, {pose_trigger_token}, digimon, {name}, full body, {pose_description}, "
         "sprite, pixel art, clean outline, limited color palette"
     )
 
@@ -124,7 +124,14 @@ def main() -> None:
     parser.add_argument("--alpha-threshold", type=int, default=8, help="Alpha threshold for bounding box.")
     parser.add_argument("--bbox-pad", type=int, default=4, help="Padding around detected sprite bbox.")
     parser.add_argument("--bg-color", default="f2f4f8", help="Canvas background hex color, e.g. f2f4f8.")
-    parser.add_argument("--trigger-token", default="vpet_style", help="Style trigger token used in captions.")
+    parser.add_argument("--trigger-token", default="vpet_style", help="Backward-compatible alias for --style-trigger-token.")
+    parser.add_argument("--style-trigger-token", default=None, help="Style trigger token used in captions.")
+    parser.add_argument("--pose-trigger-token", default="vpet_left_pose", help="Pose trigger token used in captions.")
+    parser.add_argument(
+        "--pose-description",
+        default="partial left-facing, three-quarter view",
+        help="Canonical pose wording to include in captions.",
+    )
     parser.add_argument("--limit", type=int, default=0, help="Process only N images (0 = all).")
     args = parser.parse_args()
 
@@ -133,6 +140,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     bg_color = parse_hex_color(args.bg_color)
+    style_trigger_token = args.style_trigger_token or args.trigger_token
 
     rows = []
     count = 0
@@ -154,7 +162,12 @@ def main() -> None:
         )
 
         name = clean_name(source.stem)
-        caption = make_caption(name=name, trigger_token=args.trigger_token)
+        caption = make_caption(
+            name=name,
+            style_trigger_token=style_trigger_token,
+            pose_trigger_token=args.pose_trigger_token,
+            pose_description=args.pose_description,
+        )
         out_txt.write_text(caption + "\n", encoding="utf-8")
 
         rows.append((str(source), str(out_png), caption))

@@ -28,7 +28,7 @@ LINK_MODE="${LINK_MODE:-symlink}"
 
 # Fallback mode (single shared prompt for all images).
 INSTANCE_DATA_DIR="${INSTANCE_DATA_DIR:-$REPO_DIR/datasets/vpet_lora/train_images}"
-INSTANCE_PROMPT="${INSTANCE_PROMPT:-vpet_style, digimon, full body, sprite, pixel art, clean outline, limited color palette}"
+INSTANCE_PROMPT="${INSTANCE_PROMPT:-vpet_style, vpet_left_pose, digimon, full body, partial left-facing, three-quarter view, sprite, pixel art, clean outline, limited color palette}"
 
 OUTPUT_DIR="${OUTPUT_DIR:-$REPO_DIR/outputs/lora_vpet_sdxl_h200_nocompromise}"
 RESUME_INPUT_DIR="${RESUME_INPUT_DIR:-}"
@@ -59,7 +59,7 @@ RANDOM_FLIP="${RANDOM_FLIP:-0}"
 TRAIN_TEXT_ENCODER="${TRAIN_TEXT_ENCODER:-0}"
 ENABLE_XFORMERS="${ENABLE_XFORMERS:-0}"
 
-VALIDATION_PROMPT="${VALIDATION_PROMPT:-vpet_style, digimon, full body sprite, pixel art, clean outline, simple background}"
+VALIDATION_PROMPT="${VALIDATION_PROMPT:-vpet_style, vpet_left_pose, digimon, full body, partial left-facing, three-quarter view, sprite, pixel art, clean outline, simple background}"
 VALIDATION_EPOCHS="${VALIDATION_EPOCHS:-2}"
 NUM_VALIDATION_IMAGES="${NUM_VALIDATION_IMAGES:-4}"
 

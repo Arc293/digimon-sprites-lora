@@ -52,28 +52,32 @@ def estimate_border_color(rgb: Image.Image) -> Tuple[int, int, int]:
     return (int(statistics.median(rs)), int(statistics.median(gs)), int(statistics.median(bs)))
 
 
-def find_foreground_bbox(image: Image.Image, threshold: int, alpha_threshold: int, min_area_ratio: float) -> Tuple[int, int, int, int]:
+def make_foreground_mask(image: Image.Image, threshold: int, alpha_threshold: int) -> Image.Image:
     rgba = image.convert("RGBA")
     alpha = rgba.getchannel("A")
-    alpha_box = alpha.point(lambda px: 255 if px > alpha_threshold else 0).getbbox()
-
+    alpha_mask = alpha.point(lambda px: 255 if px > alpha_threshold else 0)
+    alpha_box = alpha_mask.getbbox()
     if alpha_box is not None and alpha_box != (0, 0, rgba.width, rgba.height):
-        return alpha_box
+        return alpha_mask
 
     rgb = rgba.convert("RGB")
     bg_color = estimate_border_color(rgb)
     bg = Image.new("RGB", rgb.size, bg_color)
     diff = ImageChops.difference(rgb, bg).convert("L")
-    mask = diff.point(lambda px: 255 if px > threshold else 0)
+    return diff.point(lambda px: 255 if px > threshold else 0)
+
+
+def find_foreground_bbox(image: Image.Image, threshold: int, alpha_threshold: int, min_area_ratio: float) -> Tuple[int, int, int, int]:
+    mask = make_foreground_mask(image=image, threshold=threshold, alpha_threshold=alpha_threshold)
     box = mask.getbbox()
 
     if box is None:
-        return (0, 0, rgb.width, rgb.height)
+        return (0, 0, image.width, image.height)
 
     bw = box[2] - box[0]
     bh = box[3] - box[1]
-    if (bw * bh) / float(rgb.width * rgb.height) < min_area_ratio:
-        return (0, 0, rgb.width, rgb.height)
+    if (bw * bh) / float(image.width * image.height) < min_area_ratio:
+        return (0, 0, image.width, image.height)
 
     return box
 
@@ -89,6 +93,67 @@ def pad_box(box: Tuple[int, int, int, int], image_size: Tuple[int, int], pad: in
     )
 
 
+def mean_x(mask: Image.Image, top: int, bottom: int) -> float | None:
+    total_x = 0
+    total_n = 0
+    px = mask.load()
+    width, _ = mask.size
+    for y in range(top, bottom):
+        for x in range(width):
+            if px[x, y] > 0:
+                total_x += x
+                total_n += 1
+    if total_n == 0:
+        return None
+    return total_x / float(total_n)
+
+
+def side_protrusion(mask: Image.Image, top: int, bottom: int) -> Tuple[float | None, float | None]:
+    px = mask.load()
+    width, _ = mask.size
+    lefts = []
+    rights = []
+    for y in range(top, bottom):
+        row = [x for x in range(width) if px[x, y] > 0]
+        if not row:
+            continue
+        lefts.append(min(row))
+        rights.append(max(row))
+    if not lefts or not rights:
+        return (None, None)
+    return (sum(lefts) / float(len(lefts)), sum(rights) / float(len(rights)))
+
+
+def detect_horizontal_facing(
+    crop: Image.Image,
+    threshold: int,
+    alpha_threshold: int,
+    score_threshold: float,
+) -> Tuple[str, float]:
+    mask = make_foreground_mask(image=crop, threshold=threshold, alpha_threshold=alpha_threshold)
+    mask = mask.resize((128, 128), resample=Image.NEAREST)
+
+    split = int(128 * 0.58)
+    upper_mean = mean_x(mask, 0, split)
+    lower_mean = mean_x(mask, split, 128)
+    upper_left, upper_right = side_protrusion(mask, 0, split)
+    lower_left, lower_right = side_protrusion(mask, split, 128)
+
+    if None in (upper_mean, lower_mean, upper_left, upper_right, lower_left, lower_right):
+        return ("unknown", 0.0)
+
+    centroid_shift = float(upper_mean - lower_mean)
+    left_protrusion = float(lower_left - upper_left)
+    right_protrusion = float(upper_right - lower_right)
+    score = ((0.6 * centroid_shift) + (0.4 * (right_protrusion - left_protrusion))) / 128.0
+
+    if score >= score_threshold:
+        return ("right", score)
+    if score <= -score_threshold:
+        return ("left", score)
+    return ("unknown", score)
+
+
 def process_one(
     source: Path,
     output: Path,
@@ -99,11 +164,22 @@ def process_one(
     alpha_threshold: int,
     min_area_ratio: float,
     bbox_pad: int,
-) -> Tuple[int, int, int, int]:
+    auto_flip_right_facing: bool,
+    flip_score_threshold: float,
+) -> Tuple[Tuple[int, int, int, int], str, float, bool]:
     im = Image.open(source).convert("RGBA")
     box = find_foreground_bbox(im, threshold=threshold, alpha_threshold=alpha_threshold, min_area_ratio=min_area_ratio)
     box = pad_box(box, im.size, pad=bbox_pad)
     crop = im.crop(box)
+    facing_guess, flip_score = detect_horizontal_facing(
+        crop=crop,
+        threshold=threshold,
+        alpha_threshold=alpha_threshold,
+        score_threshold=flip_score_threshold,
+    )
+    flip_applied = auto_flip_right_facing and facing_guess == "right"
+    if flip_applied:
+        crop = crop.transpose(Image.FLIP_LEFT_RIGHT)
 
     max_dim = max(crop.width, crop.height)
     fit = int(target_size * fill_ratio)
@@ -118,7 +194,7 @@ def process_one(
     canvas.alpha_composite(resized, (x, y))
     canvas.convert("RGB").save(output, format="PNG", optimize=True)
 
-    return box
+    return (box, facing_guess, flip_score, flip_applied)
 
 
 def main() -> None:
@@ -132,6 +208,17 @@ def main() -> None:
     parser.add_argument("--alpha-threshold", type=int, default=8, help="Alpha threshold for transparent inputs.")
     parser.add_argument("--min-area-ratio", type=float, default=0.02, help="Fallback to full frame under this area.")
     parser.add_argument("--bbox-pad", type=int, default=8, help="Padding around detected subject bbox.")
+    parser.add_argument(
+        "--auto-flip-right-facing",
+        action="store_true",
+        help="Flip obviously right-facing inputs so Stage 1 starts closer to canonical left-facing V-Pet pose.",
+    )
+    parser.add_argument(
+        "--flip-score-threshold",
+        type=float,
+        default=0.06,
+        help="Confidence threshold for the simple left/right facing heuristic.",
+    )
     parser.add_argument("--limit", type=int, default=0, help="Process only N images (0 = all).")
     args = parser.parse_args()
 
@@ -148,7 +235,7 @@ def main() -> None:
             break
         out_name = f"{idx:05d}_{source.stem}.png"
         out_path = out_dir / out_name
-        box = process_one(
+        box, facing_guess, flip_score, flip_applied = process_one(
             source=source,
             output=out_path,
             target_size=args.target_size,
@@ -158,14 +245,16 @@ def main() -> None:
             alpha_threshold=args.alpha_threshold,
             min_area_ratio=args.min_area_ratio,
             bbox_pad=args.bbox_pad,
+            auto_flip_right_facing=args.auto_flip_right_facing,
+            flip_score_threshold=args.flip_score_threshold,
         )
-        rows.append((str(source), str(out_path), box))
+        rows.append((str(source), str(out_path), box, facing_guess, round(flip_score, 4), flip_applied))
         total += 1
 
     manifest = out_dir / "manifest.csv"
     with manifest.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["source", "prepared_image", "bbox"])
+        writer.writerow(["source", "prepared_image", "bbox", "facing_guess", "flip_score", "flip_applied"])
         writer.writerows(rows)
 
     print(f"Prepared {total} inputs -> {out_dir}")

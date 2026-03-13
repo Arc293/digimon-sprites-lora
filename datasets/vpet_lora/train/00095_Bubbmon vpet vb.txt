@@ -1,1 +1,1 @@
-vpet_style, digimon, bubbmon, full body, sprite, pixel art, clean outline, limited color palette
+vpet_style, vpet_left_pose, digimon, bubbmon, full body, partial left-facing, three-quarter view, sprite, pixel art, clean outline, limited color palette

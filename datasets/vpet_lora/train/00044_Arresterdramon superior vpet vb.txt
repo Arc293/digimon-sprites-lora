@@ -1,1 +1,1 @@
-vpet_style, digimon, arresterdramon superior, full body, sprite, pixel art, clean outline, limited color palette
+vpet_style, vpet_left_pose, digimon, arresterdramon superior, full body, partial left-facing, three-quarter view, sprite, pixel art, clean outline, limited color palette

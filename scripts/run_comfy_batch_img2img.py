@@ -22,12 +22,14 @@ from PIL import Image
 
 
 DEFAULT_PROMPT_TEMPLATE = (
-    "{name}, same character as input image, preserve pose and silhouette, preserve body proportions, "
-    "digimon, full body centered, virtual pet sprite style, pixel art, 1px dark outline, limited color palette"
+    "{name}, same character as input image, preserve species anatomy and signature traits, preserve silhouette family, "
+    "convert to vpet_style, vpet_left_pose, partial left-facing, three-quarter view, canonical v-pet stance, "
+    "digimon, full body centered, sprite, pixel art, clean 1px dark outline, flat cel shading, limited color palette"
 )
 DEFAULT_NEGATIVE = (
-    "different character, changed pose, changed silhouette, different anatomy, extra limbs, missing limbs, "
-    "blurry, noisy, jpeg artifacts, text, watermark, logo, signature, photorealistic, 3d render, painterly"
+    "different character, changed species, changed face, changed silhouette, changed anatomy, right-facing, "
+    "front-facing, profile-only, extra limbs, missing limbs, blurry, noisy, jpeg artifacts, text, watermark, "
+    "logo, signature, photorealistic, 3d render, painterly, high texture detail, excessive rendering detail"
 )
 
 

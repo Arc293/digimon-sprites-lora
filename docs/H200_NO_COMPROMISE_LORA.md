@@ -5,6 +5,7 @@ This runbook trains a high-capacity style LoRA from your full VPet dataset using
 - Trainer: `scripts/third_party/train_dreambooth_lora_flux2_klein.py`
 - Launcher: `scripts/h200_train_flux2_lora_nocompromise.sh`
 - Dataset mode: local Hugging Face `imagefolder` with per-image captions from `.txt`
+- Public trigger tokens: `vpet_style`, `vpet_left_pose`
 
 ## What This LoRA Is
 - Goal: transfer the Digimon VPet sprite style while preserving subject identity in img2img workflows.
@@ -169,4 +170,23 @@ cd /path/to/digimon-sprites-lora
 export OUTPUT_DIR="$PWD/outputs/lora_vpet_sdxl_h200_nocompromise"
 export NUM_PROCESSES=2
 bash scripts/h200_train_sdxl_lora_nocompromise.sh
+```
+
+## Two-Stage SDXL Inference Path
+Canonical left-facing conversion is implemented as:
+- Stage 1: pose normalization with LoRA
+- Stage 2: sprite refinement with the same LoRA
+
+Runner:
+- `scripts/run_sdxl_two_stage_vpet.py`
+
+Example:
+```bash
+cd /path/to/digimon-sprites-lora
+python3 scripts/run_sdxl_two_stage_vpet.py \
+  --input-dir working \
+  --checkpoint your_sdxl_checkpoint.safetensors \
+  --lora your_vpet_sdxl_lora.safetensors \
+  --comfy-input-dir /path/to/ComfyUI/input \
+  --comfy-output-dir /path/to/ComfyUI/output
 ```

@@ -1,0 +1,127 @@
+{
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "PLACEHOLDER_SDXL_CHECKPOINT.safetensors"
+    }
+  },
+  "16": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "lora_name": "PLACEHOLDER_VPET_SDXL_LORA.safetensors",
+      "strength_model": 0.72,
+      "strength_clip": 0.9,
+      "model": [
+        "4",
+        0
+      ],
+      "clip": [
+        "4",
+        1
+      ]
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "PLACEHOLDER_INPUT.png",
+      "upload": "image"
+    }
+  },
+  "11": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "10",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "same character as input image, preserve species anatomy and signature traits, preserve silhouette family, convert to vpet_style, vpet_left_pose, partial left-facing, three-quarter view, canonical v-pet stance, digimon, full body sprite, pixel art, clean 1px outline, flat cel shading, simplified forms, limited color palette",
+      "clip": [
+        "16",
+        1
+      ]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "different character, changed species, changed face, changed silhouette, changed anatomy, right-facing, front-facing, profile-only, photorealistic, painterly, texture heavy, blurry, noisy, text, watermark",
+      "clip": [
+        "16",
+        1
+      ]
+    }
+  },
+  "14": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "latent": [
+        "11",
+        0
+      ]
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 1337,
+      "steps": 22,
+      "cfg": 4.8,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.46,
+      "model": [
+        "16",
+        0
+      ],
+      "positive": [
+        "14",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "11",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "vpet_sdxl_pose_stage1",
+      "images": [
+        "8",
+        0
+      ]
+    }
+  }
+}

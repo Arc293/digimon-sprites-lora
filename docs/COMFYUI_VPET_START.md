@@ -50,6 +50,7 @@ Then restart ComfyUI.
 Template path:
 - `workflows/vpet_img2img_api.json`
 - `workflows/vpet_flux2_lora_api.json` (recommended first path when style transfer drifts identity)
+- `workflows/vpet_flux2_lora_controlnet_canny_api.json` (LoRA + Canny ControlNet for stronger structure/identity lock)
 - `workflows/vpet_img2img_api_stylepush.json` (stronger style transfer, weaker structure lock)
 - `workflows/vpet_img2img_api_identity.json` (IP-Adapter identity lock; best when character changes)
 
@@ -62,6 +63,9 @@ Node IDs used by batch script:
 - `6`: positive prompt
 - `7`: negative prompt
 - `14`, `15`: `ReferenceLatent` (forces stronger input-image structure retention)
+- `20`: `ControlNetLoader` (ControlNet model)
+- `21`: `Canny` (edge map from input image)
+- `22`: `ControlNetApplyAdvanced` (injects control into positive/negative conditioning)
 - `3`: sampler
 - `9`: save image
 
@@ -146,6 +150,36 @@ python3 scripts/run_comfy_batch_img2img.py \
   --sprite-output-size 192
 ```
 
+LoRA + ControlNet Canny smoke test (single image):
+
+```bash
+python3 scripts/run_comfy_batch_img2img.py \
+  --workflow workflows/vpet_flux2_lora_controlnet_canny_api.json \
+  --input-dir datasets/working_prepped \
+  --output-dir outputs/vpet_batch_lora_controlnet \
+  --comfy-input-dir /ABS/PATH/TO/ComfyUI/input \
+  --comfy-output-dir /ABS/PATH/TO/ComfyUI/output \
+  --unet flux-2-klein-4b.safetensors \
+  --text-encoder qwen_3_4b.safetensors \
+  --vae flux2-vae.safetensors \
+  --flux-lora YOUR_PIXEL_FLUX_LORA.safetensors \
+  --flux-lora-strength 0.7 \
+  --controlnet YOUR_FLUX_CONTROLNET_CANNY.safetensors \
+  --control-strength 0.75 \
+  --control-start 0.0 \
+  --control-end 0.88 \
+  --canny-low 0.35 \
+  --canny-high 0.85 \
+  --steps 20 \
+  --cfg 4.1 \
+  --denoise 0.38 \
+  --limit 1
+```
+
+Compatibility note:
+- A FLUX workflow requires a FLUX-compatible LoRA and FLUX-compatible ControlNet.
+- SDXL/SD1.5 LoRAs cannot be used directly in this FLUX.2 workflow.
+
 ## 6) Recommended tuning range
 
 - Steps: `14` to `22`
@@ -156,3 +190,60 @@ python3 scripts/run_comfy_batch_img2img.py \
 If output stops matching the source image, reduce denoise first.
 If style is too weak after fidelity is correct, increase denoise in small increments (`+0.03`).
 If identity still drifts in LoRA mode, reduce LoRA strength by `0.1` before increasing denoise.
+
+## 7) NoobAI Civitai LoRA Integration
+
+Model you shared:
+- https://civitai.com/models/378602/pokemon-sprite-xl-pixelart-lora
+
+Important compatibility note:
+- This is a **NoobAI/SDXL-family LoRA**, not a FLUX LoRA.
+- Do not use it with the FLUX workflow files above.
+
+Files to install in ComfyUI:
+- `models/checkpoints/`: a compatible NoobAI (or the exact base family shown on the LoRA page/version tag)
+- `models/loras/`: the downloaded `Pokemon Sprite XL PixelArt LoRA` file
+
+Workflow template for this path:
+- `workflows/noobai_pokemon_sprite_xl_img2img_api.json`
+- `workflows/noobai_pokemon_sprite_xl_img2img_identity_api.json` (conservative identity-preserving preset)
+
+One-image smoke test:
+
+```bash
+python3 scripts/run_comfy_batch_img2img.py \
+  --workflow workflows/noobai_pokemon_sprite_xl_img2img_api.json \
+  --input-dir datasets/working_prepped \
+  --output-dir outputs/noobai_sprite_smoke \
+  --comfy-input-dir /ABS/PATH/TO/ComfyUI/input \
+  --comfy-output-dir /ABS/PATH/TO/ComfyUI/output \
+  --checkpoint YOUR_NOOBAI_CHECKPOINT.safetensors \
+  --lora YOUR_POKEMON_SPRITE_XL_LORA.safetensors \
+  --lora-strength 0.85 \
+  --steps 24 \
+  --cfg 6.0 \
+  --denoise 0.52 \
+  --limit 1
+```
+
+Tuning:
+- Too close to input: increase `--denoise` to `0.58` and `--lora-strength` to `0.95`.
+- Identity drift: lower `--denoise` to `0.45`.
+
+Conservative identity-first smoke test:
+
+```bash
+python3 scripts/run_comfy_batch_img2img.py \
+  --workflow workflows/noobai_pokemon_sprite_xl_img2img_identity_api.json \
+  --input-dir datasets/working_prepped \
+  --output-dir outputs/noobai_sprite_identity_smoke \
+  --comfy-input-dir /ABS/PATH/TO/ComfyUI/input \
+  --comfy-output-dir /ABS/PATH/TO/ComfyUI/output \
+  --checkpoint YOUR_NOOBAI_CHECKPOINT.safetensors \
+  --lora YOUR_POKEMON_SPRITE_XL_LORA.safetensors \
+  --lora-strength 0.6 \
+  --steps 18 \
+  --cfg 4.2 \
+  --denoise 0.34 \
+  --limit 1
+```

@@ -10,7 +10,7 @@
     "class_type": "LoraLoaderModelOnly",
     "inputs": {
       "lora_name": "vpet_flux2_style_shortpass_safe2.safetensors",
-      "strength_model": 0.9,
+      "strength_model": 1.0,
       "model": [
         "4",
         0
@@ -54,7 +54,7 @@
   "6": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "text": "same character as input image, preserve silhouette, preserve anatomy, preserve key visual motifs, digimon, full body centered, virtual pet sprite style, pixel art, 1px dark outline, limited color palette",
+      "text": "same character as input image, preserve silhouette and anatomy, digimon, full body centered, virtual pet sprite style, pixel art, clean 1px dark outline, flat cel shading, limited color palette, low texture detail",
       "clip": [
         "12",
         0
@@ -64,7 +64,7 @@
   "7": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "text": "different character, changed species, changed anatomy, changed face, changed silhouette, extra limbs, missing limbs, blurry, noisy, jpeg artifacts, text, watermark, photorealistic, 3d render, painterly",
+      "text": "different character, changed species, changed anatomy, changed face, changed silhouette, photorealistic, 3d render, painterly, detailed textures, blurry, noisy, jpeg artifacts, text, watermark",
       "clip": [
         "12",
         0
@@ -101,21 +101,21 @@
     "class_type": "KSampler",
     "inputs": {
       "seed": 1337,
-      "steps": 18,
-      "cfg": 4.1,
+      "steps": 24,
+      "cfg": 4.6,
       "sampler_name": "euler",
       "scheduler": "simple",
-      "denoise": 0.36,
+      "denoise": 0.5,
       "model": [
         "16",
         0
       ],
       "positive": [
-        "14",
+        "6",
         0
       ],
       "negative": [
-        "15",
+        "7",
         0
       ],
       "latent_image": [

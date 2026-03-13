@@ -40,16 +40,28 @@ NODE_NEGATIVE = "7"
 NODE_SAMPLER = "3"
 NODE_SAVE = "9"
 NODE_IP_ADAPTER_APPLY = "31"
+MODEL_LOADER_KEYS = ("unet_name", "ckpt_name", "checkpoint_name", "model_name")
 LORA_NODE_TYPES = {
     "LoraLoader",
     "LoraLoaderModelOnly",
     "FluxLoraLoader",
     "FluxLoraLoaderModelOnly",
 }
+CANNY_NODE_TYPES = {
+    "Canny",
+    "CannyEdgePreprocessor",
+}
 
 
 class PromptLostError(RuntimeError):
     """Raised when a queued prompt disappears before history/output is available."""
+
+
+def get_model_loader_key(loader_inputs: Dict) -> Optional[str]:
+    for key in MODEL_LOADER_KEYS:
+        if key in loader_inputs:
+            return key
+    return None
 
 
 def iter_images(folder: Path) -> Iterable[Path]:
@@ -131,21 +143,26 @@ def poll_history(comfy_url: str, prompt_id: str, timeout_s: int = 900, poll_s: f
             if entry.get("outputs"):
                 return entry
 
-            if completed and status_str == "error":
-                error_message = "ComfyUI prompt failed"
-                for message in status.get("messages", []):
-                    if message and message[0] == "execution_error":
-                        payload = message[1]
-                        node_id = payload.get("node_id")
-                        node_type = payload.get("node_type")
-                        exc_type = payload.get("exception_type")
-                        exc_msg = (payload.get("exception_message") or "").strip()
-                        error_message = (
-                            f"ComfyUI execution_error at node {node_id} ({node_type}): "
-                            f"{exc_type}: {exc_msg}"
-                        )
-                        break
+            # Some ComfyUI versions keep completed=false even after execution_error.
+            # Treat any execution_error message as terminal to avoid hanging until timeout.
+            error_message = None
+            for message in status.get("messages", []):
+                if message and message[0] == "execution_error":
+                    payload = message[1]
+                    node_id = payload.get("node_id")
+                    node_type = payload.get("node_type")
+                    exc_type = payload.get("exception_type")
+                    exc_msg = (payload.get("exception_message") or "").strip()
+                    error_message = (
+                        f"ComfyUI execution_error at node {node_id} ({node_type}): "
+                        f"{exc_type}: {exc_msg}"
+                    )
+                    break
+            if error_message is not None:
                 raise RuntimeError(error_message)
+
+            if completed and status_str == "error":
+                raise RuntimeError("ComfyUI prompt failed")
 
         # If prompt vanished from queue and we still have no history, fail fast.
         queue = get_json(f"{comfy_url}/queue")
@@ -235,6 +252,34 @@ def find_lora_nodes(workflow: Dict) -> List[str]:
     return lora_nodes
 
 
+def find_controlnet_loader_nodes(workflow: Dict) -> List[str]:
+    nodes: List[str] = []
+    for node_id, node in workflow.items():
+        class_type = str(node.get("class_type", ""))
+        lowered = class_type.lower()
+        if "controlnet" in lowered and "loader" in lowered:
+            nodes.append(node_id)
+    return nodes
+
+
+def find_controlnet_apply_nodes(workflow: Dict) -> List[str]:
+    nodes: List[str] = []
+    for node_id, node in workflow.items():
+        class_type = str(node.get("class_type", ""))
+        lowered = class_type.lower()
+        if "controlnet" in lowered and "apply" in lowered:
+            nodes.append(node_id)
+    return nodes
+
+
+def find_canny_nodes(workflow: Dict) -> List[str]:
+    nodes: List[str] = []
+    for node_id, node in workflow.items():
+        if node.get("class_type") in CANNY_NODE_TYPES:
+            nodes.append(node_id)
+    return nodes
+
+
 def read_lora_name_from_workflow(workflow: Dict) -> Optional[str]:
     for node_id in find_lora_nodes(workflow):
         inputs = workflow[node_id].get("inputs", {})
@@ -245,6 +290,22 @@ def read_lora_name_from_workflow(workflow: Dict) -> Optional[str]:
     return None
 
 
+def read_controlnet_name_from_workflow(workflow: Dict) -> Optional[str]:
+    for node_id in find_controlnet_loader_nodes(workflow):
+        inputs = workflow[node_id].get("inputs", {})
+        for key in ("control_net_name", "controlnet_name", "controlnet", "model_name"):
+            value = inputs.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+    return None
+
+
+def is_placeholder_name(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    return value.strip().upper().startswith("PLACEHOLDER")
+
+
 def apply_overrides(
     workflow: Dict,
     input_filename: str,
@@ -252,6 +313,7 @@ def apply_overrides(
     negative_prompt: str,
     save_prefix: str,
     unet_name: Optional[str],
+    checkpoint_name: Optional[str],
     text_encoder_name: Optional[str],
     vae_name: Optional[str],
     clip_type: Optional[str],
@@ -262,6 +324,12 @@ def apply_overrides(
     ip_scale: Optional[float],
     flux_lora: Optional[str],
     flux_lora_strength: Optional[float],
+    controlnet_name: Optional[str],
+    control_strength: Optional[float],
+    control_start: Optional[float],
+    control_end: Optional[float],
+    canny_low: Optional[float],
+    canny_high: Optional[float],
 ) -> Dict:
     wf = copy.deepcopy(workflow)
 
@@ -270,16 +338,30 @@ def apply_overrides(
     wf[NODE_NEGATIVE]["inputs"]["text"] = negative_prompt
     wf[NODE_SAVE]["inputs"]["filename_prefix"] = save_prefix
 
-    if unet_name:
-        wf[NODE_UNET]["inputs"]["unet_name"] = unet_name
+    if unet_name is not None and checkpoint_name is not None:
+        raise RuntimeError("Use either unet_name or checkpoint_name override, not both.")
+
+    if unet_name is not None or checkpoint_name is not None:
+        loader_inputs = wf[NODE_UNET]["inputs"]
+        model_key = get_model_loader_key(loader_inputs)
+        model_name = checkpoint_name if checkpoint_name is not None else unet_name
+        if model_key is None:
+            model_key = "ckpt_name" if checkpoint_name is not None else "unet_name"
+        loader_inputs[model_key] = model_name
 
     if text_encoder_name:
+        if NODE_CLIP not in wf:
+            raise RuntimeError("Text encoder override requested but workflow has no CLIP loader node 12.")
         wf[NODE_CLIP]["inputs"]["clip_name"] = text_encoder_name
 
     if vae_name:
+        if NODE_VAE not in wf:
+            raise RuntimeError("VAE override requested but workflow has no VAE loader node 13.")
         wf[NODE_VAE]["inputs"]["vae_name"] = vae_name
 
     if clip_type:
+        if NODE_CLIP not in wf:
+            raise RuntimeError("CLIP type override requested but workflow has no CLIP loader node 12.")
         wf[NODE_CLIP]["inputs"]["type"] = clip_type
 
     sampler_inputs = wf[NODE_SAMPLER]["inputs"]
@@ -327,6 +409,60 @@ def apply_overrides(
                 if "strength_clip" in inputs:
                     inputs["strength_clip"] = flux_lora_strength
 
+    if controlnet_name is not None:
+        loader_nodes = find_controlnet_loader_nodes(wf)
+        if not loader_nodes:
+            raise RuntimeError(
+                "ControlNet model override requested but no ControlNet loader node was found in workflow."
+            )
+        for node_id in loader_nodes:
+            inputs = wf[node_id]["inputs"]
+            if "control_net_name" in inputs:
+                inputs["control_net_name"] = controlnet_name
+            elif "controlnet_name" in inputs:
+                inputs["controlnet_name"] = controlnet_name
+            elif "controlnet" in inputs:
+                inputs["controlnet"] = controlnet_name
+            else:
+                inputs["model_name"] = controlnet_name
+
+    if control_strength is not None or control_start is not None or control_end is not None:
+        apply_nodes = find_controlnet_apply_nodes(wf)
+        if not apply_nodes:
+            raise RuntimeError(
+                "ControlNet strength/start/end override requested but no ControlNet apply node was found in workflow."
+            )
+        for node_id in apply_nodes:
+            inputs = wf[node_id]["inputs"]
+            if control_strength is not None:
+                if "strength" in inputs:
+                    inputs["strength"] = control_strength
+                elif "weight" in inputs:
+                    inputs["weight"] = control_strength
+                else:
+                    inputs["strength"] = control_strength
+            if control_start is not None:
+                if "start_percent" in inputs:
+                    inputs["start_percent"] = control_start
+                elif "start" in inputs:
+                    inputs["start"] = control_start
+            if control_end is not None:
+                if "end_percent" in inputs:
+                    inputs["end_percent"] = control_end
+                elif "end" in inputs:
+                    inputs["end"] = control_end
+
+    if canny_low is not None or canny_high is not None:
+        canny_nodes = find_canny_nodes(wf)
+        if not canny_nodes:
+            raise RuntimeError("Canny override requested but no Canny node was found in workflow.")
+        for node_id in canny_nodes:
+            inputs = wf[node_id]["inputs"]
+            if canny_low is not None and "low_threshold" in inputs:
+                inputs["low_threshold"] = canny_low
+            if canny_high is not None and "high_threshold" in inputs:
+                inputs["high_threshold"] = canny_high
+
     return wf
 
 
@@ -340,7 +476,16 @@ def main() -> None:
     parser.add_argument("--comfy-output-dir", required=True, help="ComfyUI output directory path.")
     parser.add_argument("--prompt-template", default=DEFAULT_PROMPT_TEMPLATE, help="Positive prompt template with {name}.")
     parser.add_argument("--negative-prompt", default=DEFAULT_NEGATIVE, help="Negative prompt text.")
-    parser.add_argument("--unet", default=None, help="Override diffusion model filename (models/diffusion_models).")
+    parser.add_argument(
+        "--unet",
+        default=None,
+        help="Override UNET filename for UNETLoader workflows (models/diffusion_models).",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        default=None,
+        help="Override checkpoint filename for CheckpointLoader workflows (models/checkpoints).",
+    )
     parser.add_argument(
         "--text-encoder",
         default=None,
@@ -353,13 +498,27 @@ def main() -> None:
     parser.add_argument("--denoise", type=float, default=None, help="Override denoise amount.")
     parser.add_argument("--seed", type=int, default=None, help="Fixed seed for reproducibility.")
     parser.add_argument("--ip-scale", type=float, default=None, help="Override Flux IP-Adapter scale (workflow with node 31).")
-    parser.add_argument("--flux-lora", default=None, help="Override FLUX LoRA filename (models/loras).")
+    parser.add_argument(
+        "--flux-lora",
+        "--lora",
+        dest="flux_lora",
+        default=None,
+        help="Override LoRA filename (models/loras).",
+    )
     parser.add_argument(
         "--flux-lora-strength",
+        "--lora-strength",
         type=float,
+        dest="flux_lora_strength",
         default=None,
-        help="Override FLUX LoRA strength (maps to strength_model/strength depending on loader node).",
+        help="Override LoRA strength (maps to strength_model/strength depending on loader node).",
     )
+    parser.add_argument("--controlnet", default=None, help="Override ControlNet filename (models/controlnet).")
+    parser.add_argument("--control-strength", type=float, default=None, help="Override ControlNet strength.")
+    parser.add_argument("--control-start", type=float, default=None, help="Override ControlNet start percent/time.")
+    parser.add_argument("--control-end", type=float, default=None, help="Override ControlNet end percent/time.")
+    parser.add_argument("--canny-low", type=float, default=None, help="Override canny low threshold if canny node exists.")
+    parser.add_argument("--canny-high", type=float, default=None, help="Override canny high threshold if canny node exists.")
     parser.add_argument("--limit", type=int, default=0, help="Process only N images (0 = all).")
     parser.add_argument(
         "--postprocess-sprite",
@@ -386,6 +545,8 @@ def main() -> None:
         help="Max seconds to wait for each ComfyUI prompt before timeout.",
     )
     args = parser.parse_args()
+    if args.unet and args.checkpoint:
+        raise RuntimeError("Use either --unet or --checkpoint, not both.")
 
     workflow_path = Path(args.workflow)
     input_dir = Path(args.input_dir)
@@ -399,17 +560,62 @@ def main() -> None:
     workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
     client_id = str(uuid.uuid4())
 
-    selected_unet = args.unet or workflow[NODE_UNET]["inputs"]["unet_name"]
-    selected_text_encoder = args.text_encoder or workflow[NODE_CLIP]["inputs"]["clip_name"]
-    selected_vae = args.vae or workflow[NODE_VAE]["inputs"]["vae_name"]
+    if NODE_UNET not in workflow:
+        raise RuntimeError(f"Workflow is missing required model loader node '{NODE_UNET}'.")
+    loader_inputs = workflow[NODE_UNET].get("inputs", {})
+    model_loader_key = get_model_loader_key(loader_inputs)
+    if model_loader_key is None:
+        raise RuntimeError(
+            f"Node {NODE_UNET} does not contain any recognized model key: {', '.join(MODEL_LOADER_KEYS)}"
+        )
+    selected_base_model = args.checkpoint or args.unet or loader_inputs.get(model_loader_key)
+    if not selected_base_model:
+        raise RuntimeError(f"Could not determine base model name from node {NODE_UNET} ({model_loader_key}).")
+    selected_base_model_type = "diffusion_models" if model_loader_key == "unet_name" else "checkpoints"
+
+    selected_text_encoder = None
+    if NODE_CLIP in workflow and "clip_name" in workflow[NODE_CLIP].get("inputs", {}):
+        selected_text_encoder = args.text_encoder or workflow[NODE_CLIP]["inputs"]["clip_name"]
+    elif args.text_encoder:
+        raise RuntimeError("Workflow has no CLIPLoader clip_name input, but --text-encoder was provided.")
+
+    selected_vae = None
+    if NODE_VAE in workflow and "vae_name" in workflow[NODE_VAE].get("inputs", {}):
+        selected_vae = args.vae or workflow[NODE_VAE]["inputs"]["vae_name"]
+    elif args.vae:
+        raise RuntimeError("Workflow has no VAELoader vae_name input, but --vae was provided.")
+    lora_nodes = find_lora_nodes(workflow)
     selected_lora = args.flux_lora or read_lora_name_from_workflow(workflow)
+    controlnet_loader_nodes = find_controlnet_loader_nodes(workflow)
+    selected_controlnet = args.controlnet or read_controlnet_name_from_workflow(workflow)
+
+    if lora_nodes and selected_lora and is_placeholder_name(selected_lora):
+        raise RuntimeError(
+            f"Workflow LoRA model is a placeholder ({selected_lora}). "
+            "Pass --lora with your installed LoRA filename."
+        )
+
+    if controlnet_loader_nodes and not selected_controlnet:
+        raise RuntimeError(
+            "Workflow includes ControlNet loader node(s), but no controlnet model name was found. "
+            "Set a model in workflow JSON or pass --controlnet."
+        )
+    if controlnet_loader_nodes and is_placeholder_name(selected_controlnet):
+        raise RuntimeError(
+            f"Workflow ControlNet model is a placeholder ({selected_controlnet}). "
+            "Pass --controlnet with your installed controlnet filename."
+        )
 
     if not args.skip_model_check:
-        assert_model_exists(args.comfy_url, "diffusion_models", selected_unet)
-        assert_model_exists(args.comfy_url, "text_encoders", selected_text_encoder)
-        assert_model_exists(args.comfy_url, "vae", selected_vae)
+        assert_model_exists(args.comfy_url, selected_base_model_type, selected_base_model)
+        if selected_text_encoder:
+            assert_model_exists(args.comfy_url, "text_encoders", selected_text_encoder)
+        if selected_vae:
+            assert_model_exists(args.comfy_url, "vae", selected_vae)
         if selected_lora:
             assert_model_exists(args.comfy_url, "loras", selected_lora)
+        if controlnet_loader_nodes and selected_controlnet:
+            assert_model_exists(args.comfy_url, "controlnet", selected_controlnet)
 
     images = list(iter_images(input_dir))
     if args.limit > 0:
@@ -436,6 +642,7 @@ def main() -> None:
             negative_prompt=args.negative_prompt,
             save_prefix=save_prefix,
             unet_name=args.unet,
+            checkpoint_name=args.checkpoint,
             text_encoder_name=args.text_encoder,
             vae_name=args.vae,
             clip_type=args.clip_type,
@@ -446,6 +653,12 @@ def main() -> None:
             ip_scale=args.ip_scale,
             flux_lora=args.flux_lora,
             flux_lora_strength=args.flux_lora_strength,
+            controlnet_name=args.controlnet,
+            control_strength=args.control_strength,
+            control_start=args.control_start,
+            control_end=args.control_end,
+            canny_low=args.canny_low,
+            canny_high=args.canny_high,
         )
 
         prompt_id = queue_prompt(args.comfy_url, prompt_graph, client_id=client_id)

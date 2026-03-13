@@ -29,10 +29,14 @@ wandb/
 training/
 working/
 
+# Local HF caches used by training launchers
+.cache/hf_home/
+.cache/hf_datasets/
+# Auto-fetched upstream trainer (SDXL launcher can download this)
+scripts/third_party/train_dreambooth_lora_sdxl.py
+
 # Local prepared datasets (use Kaggle Dataset input instead)
 datasets/working_prepped/
-datasets/vpet_lora/train/
-datasets/vpet_lora/train_images/
 
 # Optional local secrets/config
 .env

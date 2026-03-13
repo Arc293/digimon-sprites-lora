@@ -1,0 +1,191 @@
+{
+  "4": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux-2-klein-4b.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "16": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "lora_name": "PLACEHOLDER_PIXEL_LORA.safetensors",
+      "strength_model": 0.7,
+      "model": [
+        "4",
+        0
+      ]
+    }
+  },
+  "12": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    }
+  },
+  "13": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "PLACEHOLDER_INPUT.png",
+      "upload": "image"
+    }
+  },
+  "11": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "10",
+        0
+      ],
+      "vae": [
+        "13",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "same character as input image, preserve anatomy, preserve face, preserve silhouette, digimon, full body centered, virtual pet sprite style, pixel art, 1px dark outline, limited color palette",
+      "clip": [
+        "12",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "different character, changed species, changed anatomy, changed silhouette, photorealistic, painterly, blurry, noisy, text, watermark, logo, signature",
+      "clip": [
+        "12",
+        0
+      ]
+    }
+  },
+  "14": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "latent": [
+        "11",
+        0
+      ]
+    }
+  },
+  "15": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "7",
+        0
+      ],
+      "latent": [
+        "11",
+        0
+      ]
+    }
+  },
+  "20": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "PLACEHOLDER_CONTROLNET_CANNY.safetensors"
+    }
+  },
+  "21": {
+    "class_type": "Canny",
+    "inputs": {
+      "image": [
+        "10",
+        0
+      ],
+      "low_threshold": 0.35,
+      "high_threshold": 0.85
+    }
+  },
+  "22": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": [
+        "14",
+        0
+      ],
+      "negative": [
+        "15",
+        0
+      ],
+      "control_net": [
+        "20",
+        0
+      ],
+      "image": [
+        "21",
+        0
+      ],
+      "strength": 0.75,
+      "start_percent": 0.0,
+      "end_percent": 0.88
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 1337,
+      "steps": 20,
+      "cfg": 4.1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 0.38,
+      "model": [
+        "16",
+        0
+      ],
+      "positive": [
+        "22",
+        0
+      ],
+      "negative": [
+        "22",
+        1
+      ],
+      "latent_image": [
+        "11",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "13",
+        0
+      ]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "vpet_batch_flux2_lora_controlnet",
+      "images": [
+        "8",
+        0
+      ]
+    }
+  }
+}

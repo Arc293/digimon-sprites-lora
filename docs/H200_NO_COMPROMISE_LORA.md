@@ -7,9 +7,35 @@ This runbook trains a high-capacity style LoRA from your full VPet dataset using
 - Dataset mode: local Hugging Face `imagefolder` with per-image captions from `.txt`
 - Public trigger tokens: `vpet_style`, `vpet_left_pose`
 
+## Current Dataset Snapshot
+As of March 14, 2026, the refreshed training set is:
+- `datasets/vpet_lora/train`: `1203` image+caption pairs
+- `datasets/vpet_lora/hf_imagefolder_train_sdxl`: `1203` `metadata.jsonl` rows
+- Composition:
+  - `688` pre-existing curated V-Pet pairs
+  - `515` retained DragonRod imports after duplicate archiving and outline cleanup
+- DragonRod archive state:
+  - `299` files currently in `training/dragonrod_archived_duplicates`
+  - manual spot-check shortlist: `training/dragonrod_archived_review_shortlist.md`
+
+Quick verification commands:
+```bash
+find datasets/vpet_lora/train -maxdepth 1 -type f -name '*.png' | wc -l
+wc -l datasets/vpet_lora/hf_imagefolder_train_sdxl/metadata.jsonl
+find training/dragonrod -maxdepth 1 -type f -name '*.png' | wc -l
+find training/dragonrod_archived_duplicates -maxdepth 1 -type f -name '*.png' | wc -l
+```
+
+Expected output on the current repo state:
+- `1203`
+- `1203`
+- `515`
+- `299`
+
 ## What This LoRA Is
 - Goal: transfer the Digimon VPet sprite style while preserving subject identity in img2img workflows.
 - Training set used: `datasets/vpet_lora/train` (expected image+caption pairs).
+- Current pair-count target: `1203` images with matching captions.
 - Capacity profile:
   - `rank=64`
   - `lora_alpha=64`
@@ -45,6 +71,10 @@ Optional dry run (checks only, no training):
 ```bash
 DRY_RUN=1 bash scripts/h200_train_flux2_lora_nocompromise.sh
 ```
+
+Current dry-run preflight should report:
+- `pair dataset images=1203 captions=1203`
+- `hf imagefolder rows=1203`
 
 ## One-Command Full Training
 ```bash
@@ -171,6 +201,10 @@ export OUTPUT_DIR="$PWD/outputs/lora_vpet_sdxl_h200_nocompromise"
 export NUM_PROCESSES=2
 bash scripts/h200_train_sdxl_lora_nocompromise.sh
 ```
+
+Current SDXL preflight should report:
+- `pair dataset images=1203 captions=1203`
+- `hf imagefolder rows=1203`
 
 ## Two-Stage SDXL Inference Path
 Canonical left-facing conversion is implemented as:

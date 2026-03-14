@@ -1,0 +1,1 @@
+vpet_style, vpet_left_pose, digimon, n.e.o, full body, partial left-facing, three-quarter view, sprite, pixel art, clean outline, limited color palette

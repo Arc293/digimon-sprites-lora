@@ -1,0 +1,7 @@
+{
+  "input_dir": "/Users/aritrcha/Coding/Digimon_vpets/datasets/vpet_lora/train",
+  "output_dir": "/Users/aritrcha/Coding/Digimon_vpets/datasets/vpet_lora/hf_imagefolder_train_sdxl",
+  "num_images": 1203,
+  "mode": "symlink",
+  "metadata": "/Users/aritrcha/Coding/Digimon_vpets/datasets/vpet_lora/hf_imagefolder_train_sdxl/metadata.jsonl"
+}

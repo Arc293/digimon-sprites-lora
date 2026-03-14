@@ -123,6 +123,15 @@ count_txt() {
   find "$dir" -maxdepth 1 -type f -iname '*.txt' | wc -l | tr -d ' '
 }
 
+count_metadata_rows() {
+  local dir="$1"
+  [[ -f "$dir/metadata.jsonl" ]] || {
+    echo 0
+    return
+  }
+  wc -l < "$dir/metadata.jsonl" | tr -d ' '
+}
+
 install_deps() {
   if ! is_true "$INSTALL_DEPS"; then
     return
@@ -246,6 +255,16 @@ append_flag_if_true() {
   fi
 }
 
+caption_dataset_is_stale() {
+  [[ -f "$HF_DATASET_DIR/metadata.jsonl" ]] || return 0
+
+  local newer_input=""
+  newer_input="$(find "$TRAIN_PAIR_DIR" -maxdepth 1 -type f \
+    \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.bmp' -o -iname '*.txt' \) \
+    -newer "$HF_DATASET_DIR/metadata.jsonl" -print -quit)"
+  [[ -n "$newer_input" ]]
+}
+
 prepare_caption_dataset() {
   mkdir -p "$HF_DATASETS_CACHE" "$HF_HOME"
 
@@ -254,6 +273,10 @@ prepare_caption_dataset() {
     need_build="1"
   fi
   if is_true "$REFRESH_CAPTION_DATASET"; then
+    need_build="1"
+  fi
+  if [[ "$need_build" == "0" ]] && caption_dataset_is_stale; then
+    log "Caption dataset is stale; rebuilding from updated pair dataset."
     need_build="1"
   fi
 
@@ -281,6 +304,10 @@ if len(ds["train"]) < 50:
     raise SystemExit(f"Dataset too small: {len(ds['train'])}")
 print(f"dataset_ok rows={len(ds['train'])} cols={cols}")
 PY
+
+  local hf_rows
+  hf_rows="$(count_metadata_rows "$HF_DATASET_DIR")"
+  log "hf imagefolder rows=$hf_rows dir=$HF_DATASET_DIR"
 }
 
 seed_output_dir() {
@@ -302,7 +329,17 @@ find_latest_checkpoint() {
 record_run_metadata() {
   local run_meta="$OUTPUT_DIR/run_metadata_sdxl.json"
   local git_commit
+  local train_pair_image_count="0"
+  local train_pair_caption_count="0"
+  local hf_dataset_row_count="0"
   git_commit="$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+  if [[ -d "$TRAIN_PAIR_DIR" ]]; then
+    train_pair_image_count="$(count_images "$TRAIN_PAIR_DIR")"
+    train_pair_caption_count="$(count_txt "$TRAIN_PAIR_DIR")"
+  fi
+  if [[ -d "$HF_DATASET_DIR" ]]; then
+    hf_dataset_row_count="$(count_metadata_rows "$HF_DATASET_DIR")"
+  fi
 
   RUN_META_PATH="$run_meta" \
   GIT_COMMIT="$git_commit" \
@@ -338,6 +375,9 @@ record_run_metadata() {
   VALIDATION_PROMPT="$VALIDATION_PROMPT" \
   VALIDATION_EPOCHS="$VALIDATION_EPOCHS" \
   NUM_VALIDATION_IMAGES="$NUM_VALIDATION_IMAGES" \
+  TRAIN_PAIR_IMAGE_COUNT="$train_pair_image_count" \
+  TRAIN_PAIR_CAPTION_COUNT="$train_pair_caption_count" \
+  HF_DATASET_ROW_COUNT="$hf_dataset_row_count" \
   python3 - <<'PY'
 import json
 import os
@@ -348,7 +388,10 @@ meta = {
     "output_dir": os.environ["OUTPUT_DIR"],
     "use_caption_dataset": os.environ["USE_CAPTION_DATASET"],
     "train_pair_dir": os.environ["TRAIN_PAIR_DIR"],
+    "train_pair_image_count": int(os.environ["TRAIN_PAIR_IMAGE_COUNT"]),
+    "train_pair_caption_count": int(os.environ["TRAIN_PAIR_CAPTION_COUNT"]),
     "hf_dataset_dir": os.environ["HF_DATASET_DIR"],
+    "hf_dataset_row_count": int(os.environ["HF_DATASET_ROW_COUNT"]),
     "instance_data_dir": os.environ["INSTANCE_DATA_DIR"],
     "instance_prompt": os.environ["INSTANCE_PROMPT"],
     "num_processes": int(os.environ["NUM_PROCESSES"]),
